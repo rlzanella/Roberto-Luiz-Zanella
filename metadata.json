@@ -1,0 +1,5 @@
+{
+  "name": "Your Wardrobe",
+  "description": "An AI-powered virtual try-on application. Upload a photo and customize your look from head to toe with guided menus for hair, clothing, accessories, and more, while preserving your unique identity.",
+  "requestFramePermissions": []
+}
