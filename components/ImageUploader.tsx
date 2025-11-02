@@ -1,15 +1,18 @@
 import React, { useRef, useState } from 'react';
+import { I18n } from '../i18n/strings';
 
 interface ImageUploaderProps {
   onImageUpload: (file: File) => void;
+  t: I18n;
   title?: string;
   description?: string;
 }
 
 export const ImageUploader: React.FC<ImageUploaderProps> = ({ 
   onImageUpload,
-  title = 'Click to upload',
-  description = 'or drag and drop'
+  t,
+  title,
+  description
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -17,6 +20,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       onImageUpload(event.target.files[0]);
+      // By setting the value to empty, we make sure the onChange event will
+      // fire even if the user selects the same file again.
+      event.target.value = '';
     }
   };
 
@@ -65,8 +71,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
         </svg>
-        <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">{title}</span> {description}</p>
-        <p className="text-xs text-gray-500">PNG, JPG, WEBP, etc.</p>
+        <p className="mb-2 text-sm text-gray-400"><span className="font-semibold">{title || t.uploaderTitle}</span> {description || t.uploaderDescription}</p>
+        <p className="text-xs text-gray-500">{t.uploaderHint}</p>
       </div>
     </div>
   );

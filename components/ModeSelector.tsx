@@ -1,7 +1,9 @@
 import React from 'react';
+import { I18n } from '../i18n/strings';
 
 interface ModeSelectorProps {
   onSelectMode: (mode: 'STYLE_EDITOR' | 'VIRTUAL_TRY_ON') => void;
+  t: I18n;
 }
 
 const ModeCard: React.FC<{
@@ -22,21 +24,21 @@ const ModeCard: React.FC<{
   </div>
 );
 
-export const ModeSelector: React.FC<ModeSelectorProps> = ({ onSelectMode }) => {
+export const ModeSelector: React.FC<ModeSelectorProps> = ({ onSelectMode, t }) => {
   return (
     <div className="text-center animate-fade-in">
-      <h2 className="text-3xl font-bold mb-2 text-yellow-400">How would you like to use Your Wardrobe?</h2>
-      <p className="text-lg text-gray-400 mb-8">Choose an option to get started.</p>
+      <h2 className="text-3xl font-bold mb-2 text-yellow-400">{t.modeSelectorTitle}</h2>
+      <p className="text-lg text-gray-400 mb-8">{t.modeSelectorSubtitle}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
         <ModeCard 
-            title="Style Editor"
-            description="Upload a photo and use guided menus to change hairstyle, clothing, accessories, background, and more."
+            title={t.styleEditorTitle}
+            description={t.styleEditorDescription}
             icon="🎨"
             onClick={() => onSelectMode('STYLE_EDITOR')}
         />
         <ModeCard 
-            title="Virtual Try-On"
-            description="Take a selfie, snap a picture of a clothing item you like, and see how it looks on you instantly."
+            title={t.virtualTryOnTitle}
+            description={t.virtualTryOnDescription}
             icon="📸"
             onClick={() => onSelectMode('VIRTUAL_TRY_ON')}
         />

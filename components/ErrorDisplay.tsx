@@ -1,45 +1,59 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { I18n } from '../i18n/strings';
 
 interface ErrorDisplayProps {
-  error: string | null;
+  errorKey: string | null;
+  t: I18n;
+  actionText?: string;
+  onAction?: () => void;
 }
 
-export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error }) => {
-  if (!error) {
+export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ errorKey, t, actionText, onAction }) => {
+  const [isCopied, setIsCopied] = useState(false);
+
+  if (!errorKey) {
     return null;
   }
 
-  let title = 'Oops! Something went wrong.';
-  let message = error;
+  let title = t.errorTitleDefault;
+  let message = errorKey;
   let iconPath = 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z'; // Warning Triangle
 
-  const lowerCaseError = error.toLowerCase();
+  if (errorKey in t.errors) {
+    message = t.errors[errorKey as keyof typeof t.errors];
+  } else if (errorKey.startsWith('api.reason|')) {
+    const reason = errorKey.split('|')[1];
+    message = t.errors['api.reason'].replace('{reason}', reason);
+  } else if (errorKey.startsWith('api.gemini|')) {
+    const error = errorKey.split('|')[1];
+    message = t.errors['api.gemini'].replace('{error}', error);
+  }
 
-  if (lowerCaseError.includes('network error')) {
-    title = 'Network Connection Error';
-    message = 'We couldn\'t connect to the AI service. Please check your internet and try again.';
-  } else if (lowerCaseError.includes('safety policies')) {
-    title = 'Content Policy Issue';
-    // Use the specific message from the error, don't override it
+  if (errorKey.includes('api.network')) {
+    title = t.errorTitleNetwork;
+  } else if (errorKey.includes('safety')) {
+    title = t.errorTitleContentPolicy;
     iconPath = 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'; // Ban icon
-  } else if (lowerCaseError.includes('unable to process the uploaded image')) {
-    title = 'Image Processing Error';
-    message = 'The AI model had trouble with the uploaded image. Please try using a different image, or re-save your current one as a standard PNG or JPG file.';
+  } else if (errorKey.includes('api.noImageProcess')) {
+    title = t.errorTitleImageProcessing;
     iconPath = 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'; // Image icon
-  } else if (lowerCaseError.includes('gemini api error')) {
-    title = 'AI Service Error';
-    // Display the specific error from the service by removing the prefix.
-    message = error.replace(/gemini api error: /i, '');
-  } else if (lowerCaseError.includes('upload an image and select at least one edit')) {
-    title = 'Missing Information';
-    message = 'Please make sure you have uploaded an image and selected at least one style option.';
+  } else if (errorKey.includes('api.gemini')) {
+    title = t.errorTitleAIService;
+  } else if (errorKey === t.uploadImageFirst || errorKey === t.selectOneOption) {
+    title = t.errorTitleMissingInfo;
+    message = errorKey;
     iconPath = 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'; // Info circle
-  } else if (lowerCaseError.includes('invalid file type')) {
-    title = 'Invalid File Type';
-    message = 'The selected file is not a supported image. Please upload a PNG, JPG, or other common image format.';
+  } else if (errorKey === 'file.invalidDataUrl') {
+    title = t.errorTitleInvalidFile;
     iconPath = 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z'; // File icon
   }
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="mt-6 p-4 bg-red-900/20 border border-red-700/30 text-red-200 rounded-lg flex items-start gap-4" role="alert">
@@ -51,6 +65,22 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error }) => {
       <div>
         <p className="font-semibold text-red-300">{title}</p>
         <p className="text-sm">{message}</p>
+        <div className="mt-3 flex items-center gap-4">
+          {actionText && onAction && (
+            <button
+              onClick={onAction}
+              className="text-sm font-semibold bg-red-400/20 text-red-200 px-3 py-1.5 rounded-md hover:bg-red-400/40 transition-colors focus:outline-none focus:ring-2 focus:ring-red-300"
+            >
+              {actionText}
+            </button>
+          )}
+           <button
+            onClick={handleCopy}
+            className="text-sm font-semibold bg-gray-500/20 text-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-500/40 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400"
+          >
+            {isCopied ? t.errorCopied : t.copyError}
+          </button>
+        </div>
       </div>
     </div>
   );

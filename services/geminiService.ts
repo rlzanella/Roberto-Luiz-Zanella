@@ -1,4 +1,5 @@
-import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, Modality, HarmCategory, HarmBlockThreshold, Chat } from "@google/genai";
+import { I18n, strings } from '../i18n/strings';
 
 const API_KEY = process.env.API_KEY;
 if (!API_KEY) {
@@ -7,49 +8,56 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// Define safety settings to be more permissive, preventing false positives
-// for a virtual wardrobe use case.
 const safetySettings = [
-  {
-    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    threshold: HarmBlockThreshold.BLOCK_NONE,
-  },
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
 
+export async function translateText(text: string, targetLang: string = 'en'): Promise<string> {
+    if (!text.trim()) {
+        return text;
+    }
+    try {
+        const translateModel = 'gemini-2.5-flash';
+        const prompt = `Translate the following text to ${targetLang}. Only return the translated text, without any additional explanation or quotation marks: "${text}"`;
+        
+        const response = await ai.models.generateContent({
+            model: translateModel,
+            contents: prompt,
+            config: {
+                safetySettings,
+            }
+        });
+        
+        const translation = response.text;
+        
+        if (translation && translation.trim()) {
+            return translation.trim().replace(/^"|"$/g, '');
+        }
+        return text;
+    } catch (error) {
+        console.error("Error calling Gemini API for translation:", error);
+        throw new Error('api.translation');
+    }
+}
 
-async function generateDescriptionForImage(base64Image: string): Promise<string> {
+export async function generateDescriptionForImage(base64Image: string, t: I18n): Promise<string> {
    try {
     const descriptionModel = 'gemini-2.5-flash';
-    const descriptionPrompt = "Describe this image in one short, creative sentence.";
-
+    
     const response = await ai.models.generateContent({
       model: descriptionModel,
       contents: {
         parts: [
-          {
-            inlineData: {
-              data: base64Image,
-              mimeType: 'image/png', // The generated image is a PNG
-            },
-          },
-          {
-            text: descriptionPrompt,
-          },
+          { inlineData: { data: base64Image, mimeType: 'image/png' } },
+          { text: strings.en.prompt.describeImage },
         ],
       },
-      safetySettings,
+      config: {
+        safetySettings,
+      },
     });
 
     const description = response.text;
@@ -57,11 +65,43 @@ async function generateDescriptionForImage(base64Image: string): Promise<string>
     if (description && description.trim()) {
       return description.trim();
     }
-    return "The AI did not provide a description for this image.";
+    return t.prompt.describeImageFallback;
 
   } catch (error) {
     console.error("Error calling Gemini API for image description:", error);
-    return "Your image was created, but we couldn't generate a description for it.";
+    return t.prompt.describeImageError;
+  }
+}
+
+export async function detectGenderInImage(base64Image: string): Promise<'Male' | 'Female' | 'Uncertain'> {
+   try {
+    const model = 'gemini-2.5-flash';
+    const prompt = "Analyze the person in this image. Respond with only one word: 'Male', 'Female', or 'Uncertain'. Do not add any other text or punctuation.";
+    
+    const response = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { inlineData: { data: base64Image, mimeType: 'image/png' } },
+          { text: prompt },
+        ],
+      },
+      config: { safetySettings },
+    });
+
+    const text = response.text.trim().toLowerCase();
+    
+    if (text.includes('female')) {
+      return 'Female';
+    } else if (text.includes('male')) {
+      return 'Male';
+    }
+    return 'Uncertain';
+
+  } catch (error) {
+    console.error("Error calling Gemini API for gender detection:", error);
+    // It's safer to return 'Uncertain' on error than to block generation.
+    return 'Uncertain';
   }
 }
 
@@ -69,39 +109,83 @@ function handleImageGenerationError(response: any): string {
     const candidate = response.candidates?.[0];
     const finishReason = candidate?.finishReason;
     
-    let errorMessage = 'The API response did not contain an image.';
-    if (finishReason === 'SAFETY') {
-        errorMessage = "Your request was blocked as it might violate Google's safety policies. This can happen with prompts that are ambiguous or touch on sensitive topics. Please rephrase your prompt to be more specific and try again.";
+    let errorKey = 'api.noImage';
+    if (finishReason === 'SAFETY' || finishReason === 'PROHIBITED_CONTENT') {
+        errorKey = "api.safety";
     } else if (finishReason === 'IMAGE_SAFETY') {
-        errorMessage = "The uploaded image was blocked as it might violate Google's safety policies. Please try using a different image.";
+        errorKey = "api.imageSafety";
     } else if (finishReason === 'NO_IMAGE') {
-        errorMessage = 'The model was unable to process the uploaded image. Please try using a different image or re-saving your current one in a standard format like PNG or JPG.';
+        errorKey = 'api.noImageProcess';
     } else if (finishReason === 'IMAGE_OTHER') {
-        errorMessage = "The model couldn't complete your request. This can sometimes happen with very complex or ambiguous edits. Please try simplifying your request (e.g., change fewer items at once) and try again.";
+        errorKey = "api.imageOther";
     } else if (finishReason && finishReason !== 'STOP') {
-        errorMessage = `Image generation failed. Reason: ${finishReason}. Please try again.`;
+        errorKey = `api.reason|${finishReason}`; // Special format for interpolation
     }
-    return errorMessage;
+    return errorKey;
 }
 
-export async function editImageWithGemini(
+// --- NEW CHAT-BASED IMAGE EDITING ---
+
+export async function createImageChat(): Promise<Chat> {
+  const chat = ai.chats.create({
+      model: 'gemini-2.5-flash-image',
+      config: { 
+        safetySettings,
+        responseModalities: [Modality.IMAGE],
+      }
+  });
+  return chat;
+}
+
+export async function sendMessageToImageChat(
+  chat: Chat,
   base64ImageData: string,
   mimeType: string,
   prompt: string
-): Promise<{ imageBase64: string; description: string }> {
-  
+): Promise<string> {
+  const imagePart = { inlineData: { data: base64ImageData, mimeType } };
+  const textPart = { text: prompt };
+
+  try {
+    const response = await chat.sendMessage({ message: [imagePart, textPart] });
+
+    const imagePartResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+    if (imagePartResponse?.inlineData?.data) {
+      return imagePartResponse.inlineData.data;
+    } else {
+      throw new Error(handleImageGenerationError(response));
+    }
+  } catch (error) {
+    console.error("Error calling Gemini API for image generation:", error);
+    if (error instanceof Error) {
+        if (error.message.toLowerCase().includes('network') || error.message.toLowerCase().includes('failed to fetch')) {
+          throw new Error(`api.network`);
+        }
+        if(error.message.startsWith('api.')) {
+            throw error;
+        }
+        throw new Error(`api.gemini|${error.message}`);
+    }
+    throw new Error("api.unknown");
+  }
+}
+
+
+// --- VIRTUAL TRY-ON ---
+
+async function callGeminiForImage(
+  parts: ({ text: string } | { inlineData: { data: string, mimeType: string } })[]
+): Promise<string> {
   let editedImageBase64: string;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { inlineData: { data: base64ImageData, mimeType: mimeType } },
-          { text: prompt },
-        ],
+      contents: { parts },
+      config: {
+        responseModalities: [Modality.IMAGE],
+        safetySettings
       },
-      config: { responseModalities: [Modality.IMAGE] },
-      safetySettings,
     });
 
     const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
@@ -115,71 +199,28 @@ export async function editImageWithGemini(
     console.error("Error calling Gemini API for image generation:", error);
     if (error instanceof Error) {
         if (error.message.toLowerCase().includes('network') || error.message.toLowerCase().includes('failed to fetch')) {
-          throw new Error(`Network Error: Please check your internet connection.`);
+          throw new Error(`api.network`);
         }
-        throw new Error(`Gemini API Error: ${error.message}`);
+        if(error.message.startsWith('api.')) {
+            throw error;
+        }
+        throw new Error(`api.gemini|${error.message}`);
     }
-    throw new Error("An unexpected error occurred during image generation.");
+    throw new Error("api.unknown");
   }
-
-  const description = await generateDescriptionForImage(editedImageBase64);
-  return { imageBase64: editedImageBase64, description };
+  return editedImageBase64;
 }
-
 
 export async function tryOnClothingWithGemini(
   personBase64: string,
   personMimeType: string,
   clothingBase64: string,
   clothingMimeType: string
-): Promise<{ imageBase64: string; description: string }> {
-
-  const prompt = `
-    INSTRUCTION: Your task is to perform a virtual try-on.
-    1.  Analyze the first image, which contains a person.
-    2.  Analyze the second image, which contains a single clothing item.
-    3.  Generate a new, photorealistic image where the person from the first image is wearing the clothing item from the second image.
-    
-    CRITICAL RULES:
-    - You MUST perfectly preserve the person's identity. Do NOT change their face, facial features, skin tone, hair, or body shape.
-    - The person's pose and the background from the first image should be maintained as closely as possible.
-    - The clothing must be realistically adapted to fit the person's body and pose. Discard the background from the clothing image.
-    - The final output must be a single, cohesive, high-quality photograph.
-  `;
-  
-  let editedImageBase64: string;
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: {
-        parts: [
-          { inlineData: { data: personBase64, mimeType: personMimeType } },
-          { inlineData: { data: clothingBase64, mimeType: clothingMimeType } },
-          { text: prompt },
-        ],
-      },
-      config: { responseModalities: [Modality.IMAGE] },
-      safetySettings,
-    });
-
-    const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-
-    if (imagePart?.inlineData?.data) {
-      editedImageBase64 = imagePart.inlineData.data;
-    } else {
-       throw new Error(handleImageGenerationError(response));
-    }
-  } catch (error) {
-    console.error("Error calling Gemini API for virtual try-on:", error);
-     if (error instanceof Error) {
-        if (error.message.toLowerCase().includes('network') || error.message.toLowerCase().includes('failed to fetch')) {
-          throw new Error(`Network Error: Please check your internet connection.`);
-        }
-        throw new Error(`Gemini API Error: ${error.message}`);
-    }
-    throw new Error("An unexpected error occurred during image generation.");
-  }
-
-  const description = await generateDescriptionForImage(editedImageBase64);
-  return { imageBase64: editedImageBase64, description };
+): Promise<string> {
+  const parts = [
+    { inlineData: { data: personBase64, mimeType: personMimeType } },
+    { inlineData: { data: clothingBase64, mimeType: clothingMimeType } },
+    { text: strings.en.prompt.tryOnInstruction },
+  ];
+  return await callGeminiForImage(parts);
 }

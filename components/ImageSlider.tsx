@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { Loader } from './Loader';
+import { I18n } from '../i18n/strings';
 
 interface ImageSliderProps {
   beforeSrc: string | null;
   afterSrc: string | null;
   isLoading?: boolean;
   rotation?: number;
+  t: I18n;
 }
 
-export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, isLoading = false, rotation = 0 }) => {
+export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, isLoading = false, rotation = 0, t }) => {
   const [sliderPos, setSliderPos] = useState(50);
 
   const finalBeforeSrc = beforeSrc || "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
@@ -25,7 +27,7 @@ export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, i
         {isLoading && (
           <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-20">
             <Loader />
-            <p className="text-gray-300 mt-2">Generating your image...</p>
+            <p className="text-gray-300 mt-2">{t.generatingYourImage}</p>
           </div>
         )}
         
@@ -34,14 +36,14 @@ export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, i
             <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            <span>Your images will appear here</span>
+            <span>{t.imagesAppearHere}</span>
           </div>
         )}
 
         {beforeSrc && (
            <img
             src={finalBeforeSrc}
-            alt="Original"
+            alt={t.original}
             className="absolute top-0 left-0 object-contain w-full h-full transition-transform duration-300 ease-in-out"
             style={{ transform: `rotate(${rotation}deg)` }}
             draggable={false}
@@ -51,7 +53,7 @@ export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, i
         {afterSrc && (
           <img
             src={finalAfterSrc}
-            alt="Edited"
+            alt={t.edited}
             className="absolute top-0 left-0 object-contain w-full h-full transition-transform duration-300 ease-in-out"
             style={{ 
               clipPath: `inset(0 ${100 - sliderPos}% 0 0)`,
@@ -78,7 +80,7 @@ export const ImageSlider: React.FC<ImageSliderProps> = ({ beforeSrc, afterSrc, i
               value={sliderPos}
               onChange={(e) => setSliderPos(Number(e.target.value))}
               className="absolute inset-0 w-full h-full cursor-ew-resize opacity-0 z-10"
-              aria-label="Before and after image slider"
+              aria-label={t.beforeAfterSlider}
             />
           </>
         )}
